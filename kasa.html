@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gelişmiş Çoklu Kasa</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+        h2 { text-align: center; color: #333; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        
+        /* Kasa Kartları */
+        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
+        .card { padding: 15px; border-radius: 10px; color: white; text-align: center; }
+        .tl { background: #2c3e50; border-bottom: 5px solid #1a252f; }
+        .usd { background: #27ae60; border-bottom: 5px solid #1e8449; }
+        .eur { background: #2980b9; border-bottom: 5px solid #1f6391; }
+        .card h4 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+        .card p { margin: 10px 0 0; font-size: 22px; font-weight: bold; }
+
+        /* Form Alanı */
+        .input-group { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; background: #fdfdfd; border: 1px solid #eee; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
+        input, select, button { padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
+        input:focus { border-color: #3498db; }
+        button { background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #d35400; transform: translateY(-1px); }
+
+        /* Tablo Stil */
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8f9fa; padding: 15px; text-align: left; border-bottom: 2px solid #eee; color: #666; }
+        td { padding: 15px; border-bottom: 1px solid #f1f1f1; font-size: 14px; }
+        .in { color: #27ae60; font-weight: bold; }
+        .out { color: #e74c3c; font-weight: bold; }
+        .del { color: #ccc; cursor: pointer; font-size: 20px; text-align: center; }
+        .del:hover { color: #c0392b; }
+
+        @media (max-width: 768px) { .summary-grid, .input-group { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Dijital Kasa Defteri</h2>
+
+    <div class="summary-grid">
+        <div class="card tl"><h4>TL BAKİYE</h4><p id="res-TL">0,00 ₺</p></div>
+        <div class="card usd"><h4>USD BAKİYE</h4><p id="res-USD">0,00 $</p></div>
+        <div class="card eur"><h4>EUR BAKİYE</h4><p id="res-EUR">0,00 €</p></div>
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="desc" placeholder="Açıklama (Örn: Ömer Zaman)">
+        <input type="number" id="val" placeholder="Miktar" step="any">
+        <select id="cur">
+            <option value="TL">TL (₺)</option>
+            <option value="USD">Dolar ($)</option>
+            <option value="EUR">Euro (€)</option>
+        </select>
+        <select id="mode">
+            <option value="in">Giriş (+)</option>
+            <option value="out">Çıkış (-)</option>
+        </select>
+        <button onclick="kaydet()">EKLE</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Tarih</th>
+                <th>Açıklama</th>
+                <th>Döviz</th>
+                <th>İşlem</th>
+                <th style="text-align: right;">Miktar</th>
+                <th style="text-align: center;">Sil</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+</div>
+
+<script>
+    // Tarayıcı hafızasından verileri al
+    let veri = JSON.parse(localStorage.getItem('kasa_app_data')) || [];
+
+    // Sayfa yüklendiğinde listeyi ve toplamları göster
+    yenile();
+
+    function kaydet() {
+        const aciklama = document.getElementById('desc').value;
+        const miktar = parseFloat(document.getElementById('val').value);
+        const birim = document.getElementById('cur').value;
+        const tip = document.getElementById('mode').value;
+
+        if (aciklama === "" || isNaN(miktar)) {
+            alert("Lütfen tüm alanları doldurun!");
+            return;
+        }
+
+        const yeniIslem = {
+            id: Date.now(),
+            tarih: new Date().toLocaleDateString('tr-TR'),
+            aciklama,
+            miktar,
+            birim,
+            tip
+        };
+
+        veri.push(yeniIslem);
+        localStorage.setItem('kasa_app_data', JSON.stringify(veri));
+        
+        // Inputları temizle
+        document.getElementById('desc').value = "";
+        document.getElementById('val').value = "";
+        
+        yenile();
+    }
+
+    function sil(id) {
+        if(confirm("Bu işlemi silmek istiyor musunuz?")) {
+            veri = veri.filter(item => item.id !== id);
+            localStorage.setItem('kasa_app_data', JSON.stringify(veri));
+            yenile();
+        }
+    }
+
+    function yenile() {
+        const tablo = document.getElementById('tbody');
+        tablo.innerHTML = "";
+
+        // Toplamları sıfırla
+        let toplamlar = { TL: 0, USD: 0, EUR: 0 };
+
+        // İşlemleri listele (En yeni en üstte)
+        [...veri].reverse().forEach(islem => {
+            // Matematiksel hesaplama: Girişse topla, çıkışsa çıkar
+            if (islem.tip === 'in') {
+                toplamlar[islem.birim] += islem.miktar;
+            } else {
+                toplamlar[islem.birim] -= islem.miktar;
+            }
+
+            const satir = `
+                <tr>
+                    <td style="color:#999">${islem.tarih}</td>
+                    <td><strong>${islem.aciklama}</strong></td>
+                    <td>${islem.birim}</td>
+                    <td class="${islem.tip}">${islem.tip === 'in' ? 'Giriş (+)' : 'Çıkış (-)'}</td>
+                    <td style="text-align: right; font-weight:bold" class="${islem.tip}">
+                        ${islem.miktar.toLocaleString('tr-TR', {minimumFractionDigits: 2})}
+                    </td>
+                    <td class="del" onclick="sil(${islem.id})">×</td>
+                </tr>
+            `;
+            tablo.innerHTML += satir;
+        });
+
+        // Üstteki kartları güncelle
+        document.getElementById('res-TL').innerText = toplamlar.TL.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + " ₺";
+        document.getElementById('res-USD').innerText = toplamlar.USD.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + " $";
+        document.getElementById('res-EUR').innerText = toplamlar.EUR.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + " €";
+    }
+</script>
+
+</body>
+</html>
