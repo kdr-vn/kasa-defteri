@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gelişmiş Çoklu Kasa</title>
+    <title>Dijital Kasa Defteri PRO</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
         .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
@@ -19,11 +19,14 @@
         .card p { margin: 10px 0 0; font-size: 22px; font-weight: bold; }
 
         /* Form Alanı */
-        .input-group { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; background: #fdfdfd; border: 1px solid #eee; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
+        .input-group { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; background: #fdfdfd; border: 1px solid #eee; padding: 20px; border-radius: 8px; margin-bottom: 10px; }
         input, select, button { padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; }
-        input:focus { border-color: #3498db; }
-        button { background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        button:hover { background: #d35400; transform: translateY(-1px); }
+        
+        .btn-add { background: #e67e22; color: white; border: none; cursor: pointer; font-weight: bold; }
+        .btn-add:hover { background: #d35400; }
+        
+        .btn-close { background: #7f8c8d; color: white; border: none; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 25px; padding: 10px; transition: 0.3s; }
+        .btn-close:hover { background: #2c3e50; }
 
         /* Tablo Stil */
         table { width: 100%; border-collapse: collapse; }
@@ -31,10 +34,12 @@
         td { padding: 15px; border-bottom: 1px solid #f1f1f1; font-size: 14px; }
         .in { color: #27ae60; font-weight: bold; }
         .out { color: #e74c3c; font-weight: bold; }
-        .del { color: #ccc; cursor: pointer; font-size: 20px; text-align: center; }
+        .del { color: #ccc; cursor: pointer; font-size: 20px; text-align: center; width: 40px; }
         .del:hover { color: #c0392b; }
 
-        @media (max-width: 768px) { .summary-grid, .input-group { grid-template-columns: 1fr; } }
+        @media (max-width: 768px) { 
+            .summary-grid, .input-group { grid-template-columns: 1fr; } 
+        }
     </style>
 </head>
 <body>
@@ -60,8 +65,10 @@
             <option value="in">Giriş (+)</option>
             <option value="out">Çıkış (-)</option>
         </select>
-        <button onclick="kaydet()">EKLE</button>
+        <button class="btn-add" onclick="kaydet()">EKLE</button>
     </div>
+
+    <button class="btn-close" onclick="yeniGuneGec()">GÜNÜ KAPAT (YENİ GÜNE DEVRET)</button>
 
     <table>
         <thead>
@@ -79,10 +86,7 @@
 </div>
 
 <script>
-    // Tarayıcı hafızasından verileri al
     let veri = JSON.parse(localStorage.getItem('kasa_app_data')) || [];
-
-    // Sayfa yüklendiğinde listeyi ve toplamları göster
     yenile();
 
     function kaydet() {
@@ -92,7 +96,7 @@
         const tip = document.getElementById('mode').value;
 
         if (aciklama === "" || isNaN(miktar)) {
-            alert("Lütfen tüm alanları doldurun!");
+            alert("Lütfen açıklama ve miktar giriniz!");
             return;
         }
 
@@ -106,38 +110,67 @@
         };
 
         veri.push(yeniIslem);
-        localStorage.setItem('kasa_app_data', JSON.stringify(veri));
+        saveAndRefresh();
         
-        // Inputları temizle
         document.getElementById('desc').value = "";
         document.getElementById('val').value = "";
-        
-        yenile();
+        document.getElementById('desc').focus();
     }
 
     function sil(id) {
         if(confirm("Bu işlemi silmek istiyor musunuz?")) {
             veri = veri.filter(item => item.id !== id);
-            localStorage.setItem('kasa_app_data', JSON.stringify(veri));
-            yenile();
+            saveAndRefresh();
         }
+    }
+
+    function yeniGuneGec() {
+        if(veri.length === 0) return alert("Kasa zaten boş!");
+        
+        if(confirm("Günü kapatmak istiyor musunuz? Tüm liste temizlenecek ve mevcut bakiyeler 'Dünden Devreden' olarak yeni güne aktarılacaktır.")) {
+            // Mevcut bakiyeleri hesapla
+            let totals = { TL: 0, USD: 0, EUR: 0 };
+            veri.forEach(islem => {
+                if (islem.tip === 'in') totals[islem.birim] += islem.miktar;
+                else totals[islem.birim] -= islem.miktar;
+            });
+
+            // Listeyi temizle
+            veri = [];
+
+            // Bakiyeleri devret
+            const bugun = new Date().toLocaleDateString('tr-TR');
+            Object.keys(totals).forEach(birim => {
+                if (totals[birim] !== 0) {
+                    veri.push({
+                        id: Date.now() + Math.random(),
+                        tarih: bugun,
+                        aciklama: "Dünden Devreden",
+                        miktar: Math.abs(totals[birim]),
+                        birim: birim,
+                        tip: totals[birim] >= 0 ? 'in' : 'out'
+                    });
+                }
+            });
+
+            saveAndRefresh();
+            alert("Yeni güne geçildi. Bakiyeler devredildi.");
+        }
+    }
+
+    function saveAndRefresh() {
+        localStorage.setItem('kasa_app_data', JSON.stringify(veri));
+        yenile();
     }
 
     function yenile() {
         const tablo = document.getElementById('tbody');
         tablo.innerHTML = "";
-
-        // Toplamları sıfırla
         let toplamlar = { TL: 0, USD: 0, EUR: 0 };
 
-        // İşlemleri listele (En yeni en üstte)
         [...veri].reverse().forEach(islem => {
-            // Matematiksel hesaplama: Girişse topla, çıkışsa çıkar
-            if (islem.tip === 'in') {
-                toplamlar[islem.birim] += islem.miktar;
-            } else {
-                toplamlar[islem.birim] -= islem.miktar;
-            }
+            if (islem.tip === 'in') toplamlar[islem.birim] += islem.miktar;
+            else toplamlar[islem.birim] -= islem.miktar;
 
             const satir = `
                 <tr>
@@ -154,7 +187,6 @@
             tablo.innerHTML += satir;
         });
 
-        // Üstteki kartları güncelle
         document.getElementById('res-TL').innerText = toplamlar.TL.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + " ₺";
         document.getElementById('res-USD').innerText = toplamlar.USD.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + " $";
         document.getElementById('res-EUR').innerText = toplamlar.EUR.toLocaleString('tr-TR', {minimumFractionDigits: 2}) + " €";
